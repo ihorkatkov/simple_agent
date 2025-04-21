@@ -4,6 +4,7 @@ defmodule SimpleAgent.MixProject do
   def project do
     [
       app: :simple_agent,
+      description: "A simple coding agent implementation in Elixir",
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,

@@ -1,21 +1,34 @@
-# SimpleAgent
+# Simple Agent
 
-Hello World
+A showcase library demonstrating a simple coding agent implementation in Elixir. 
 
-## Installation
+## Overview
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `simple_agent` to your list of dependencies in `mix.exs`:
+Simple Agent is a lightweight Elixir application that:
+- Implements a GenServer-based agent server for managing chat state
+- Integrates with the Anthropic Claude API for natural language processing
+- Provides a CLI interface for interactive conversations
+- Supports tool definitions for extending agent capabilities
 
-```elixir
-def deps do
-  [
-    {:simple_agent, "~> 0.1.0"}
-  ]
-end
+## Requirements
+
+- Elixir ~> 1.15
+- Anthropic API key (set as ANTHROPIC_API_KEY environment variable)
+
+## Usage
+
+1. Set your Anthropic API key:
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/simple_agent>.
+2. Start the agent:
+```bash
+mix escript.build
+./simple_agent
+```
+
+## License
+
+MIT License
 

@@ -12,8 +12,6 @@ defmodule SimpleAgent do
 
   After completing a response, provide three follow-up questions as if I am asking you. Format these as **Q1**, **Q2**, and **Q3**. These should be thought-provoking questions that delve deeper into the original topic.
 
-  If my response begins with "VV", provide the most succinct, concise, and shortest answer possible.
-
   # Output Format
 
   - Provide detailed reasoning before executing any coding solution.
@@ -57,7 +55,6 @@ defmodule SimpleAgent do
     end
   end
 
-  # Sends conversation + tool definitions, handles any tool_use blocks
   def handle_response(client, tools, conversation) do
     # extract just the metadata for the API
     tool_defs = Enum.map(tools, &Map.take(&1, [:name, :description, :input_schema]))
@@ -86,7 +83,7 @@ defmodule SimpleAgent do
 
         # Get the tool_use block
         tool_use = Enum.at(content_blocks, tool_use_index)
-        
+
         # Execute the requested tool
         IO.puts("\e[92mtool\e[0m: #{tool_use["name"]}(#{Jason.encode!(tool_use["input"])})")
         result = execute_tool(tool_use, tools)
