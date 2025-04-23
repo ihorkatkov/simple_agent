@@ -3,6 +3,8 @@ defmodule SimpleAgent do
   Documentation for `SimpleAgent`.
   """
 
+  alias SimpleAgent.Conversation
+
   @system_prompt """
   Act as an expert senior Elixir engineer. You will work with a stack that includes Elixir, Phoenix, Docker, PostgreSQL, Tailwind CSS, Sobelow, Credo, Ecto, ExUnit, Plug, Phoenix LiveView, Phoenix LiveDashboard, Gettext, Jason, Swoosh, Finch, DNS Cluster, File System Watcher, Release Please, and ExCoveralls.
 
@@ -37,10 +39,10 @@ defmodule SimpleAgent do
   """
   def run(client, tools) do
     IO.puts("Chat with Claude (use Ctrl‑C to quit)")
-    loop(client, tools, [])
+    loop(%Conversation{}, client, tools)
   end
 
-  defp loop(client, tools, conversation) do
+  defp loop(conversation, client, tools) do
     case IO.gets("\e[94mYou\e[0m: ") do
       :eof ->
         # user sent EOF
@@ -48,11 +50,11 @@ defmodule SimpleAgent do
 
       raw_input ->
         user_input = String.trim(raw_input)
-        convo1 = conversation ++ [%{role: "user", content: user_input}]
-        {blocks, convo2} = handle_response(client, tools, convo1)
 
-        Enum.each(blocks, &print_block/1)
-        loop(client, tools, convo2)
+        conversation
+        |> Conversation.add_user_message(user_input)
+        |> handle_response(client, tools)
+        |> loop(client, tools)
     end
   end
 
@@ -60,21 +62,21 @@ defmodule SimpleAgent do
   Processes a user message, sends it to Claude, and handles any tool use.
   Returns {blocks, updated_conversation}.
   """
-  def handle_response(client, tools, conversation) do
+  def handle_response(conversation, client, tools) do
     # extract just the metadata for the API
     tool_defs = Enum.map(tools, &Map.take(&1, [:name, :description, :input_schema]))
 
     params = [
       model: "claude-3-7-sonnet-latest",
       system: @system_prompt,
-      messages: conversation,
+      messages: conversation.messages,
       tools: tool_defs,
       tool_choice: %{type: "auto"}
     ]
 
     {:ok, response} = Anthropix.chat(client, params)
     %{"content" => content_blocks, "stop_reason" => stop_reason} = response
-    conversation = conversation ++ [%{role: "assistant", content: content_blocks}]
+    conversation = Conversation.add_assistant_message(conversation, content_blocks)
 
     # Handle response based on stop_reason from Anthropic API
     # stop_reason can be one of:
@@ -92,11 +94,13 @@ defmodule SimpleAgent do
             end
           end)
 
-        new_convo = conversation ++ [%{role: "user", content: tool_result_blocks}]
-        handle_response(client, tools, new_convo)
+        conversation
+        |> Conversation.add_user_message(tool_result_blocks)
+        |> handle_response(client, tools)
 
       _ ->
-        {content_blocks, conversation}
+        Enum.each(content_blocks, &print_block/1)
+        conversation
     end
   end
 

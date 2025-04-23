@@ -3,6 +3,7 @@ defmodule SimpleAgent.Server do
   A GenServer that manages our Claude chat state & tools,
   handles user input, invokes Claude + tools, and prints responses.
   """
+  alias SimpleAgent.Conversation
 
   use GenServer
   require Logger
@@ -27,31 +28,20 @@ defmodule SimpleAgent.Server do
   @impl true
   def init(%{api_key: api_key, tools: tools} = _opts) do
     client = Anthropix.init(api_key)
-    state = %{client: client, tools: tools, conversation: []}
+    state = %{client: client, tools: tools, conversation: %Conversation{}}
     {:ok, state}
   end
 
   @impl true
-  def handle_call({:user_input, raw}, _from, %{conversation: conv} = state) do
+  def handle_call({:user_input, raw}, _from, %{conversation: conversation} = state) do
     user_msg = String.trim(raw)
-    convo1 = conv ++ [%{role: "user", content: user_msg}]
 
-    response =
-      SimpleAgent.handle_response(
-        state.client,
-        state.tools,
-        convo1
-      )
+    conversation =
+      conversation
+      |> Conversation.add_user_message(user_msg)
+      |> SimpleAgent.handle_response(state.client, state.tools)
 
-    case response do
-      {:error, _reason} = error ->
-        Logger.error(error)
-        {:reply, error, state}
-
-      {blocks, convo2} ->
-        Enum.each(blocks, &print_block/1)
-        {:reply, :ok, %{state | conversation: convo2}}
-    end
+    {:reply, :ok, %{state | conversation: conversation}}
   end
 
   ## Helpers
