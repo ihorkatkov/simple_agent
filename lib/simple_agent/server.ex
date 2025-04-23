@@ -5,7 +5,6 @@ defmodule SimpleAgent.Server do
   """
 
   use GenServer
-  alias Anthropix
   require Logger
 
   ## Client API
@@ -57,9 +56,12 @@ defmodule SimpleAgent.Server do
 
   ## Helpers
 
-  defp print_block(%{"type" => "text", "text" => text}) do
+  @doc """
+  Formats and prints a block of content from Claude.
+  """
+  def print_block(%{"type" => "text", "text" => text}) do
     IO.puts("\e[93mClaude\e[0m: #{text}")
   end
 
-  defp print_block(_), do: :ok
+  def print_block(_), do: :ok
 end

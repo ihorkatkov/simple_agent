@@ -3,8 +3,6 @@ defmodule SimpleAgent do
   Documentation for `SimpleAgent`.
   """
 
-  alias Anthropix
-
   @system_prompt """
   Act as an expert senior Elixir engineer. You will work with a stack that includes Elixir, Phoenix, Docker, PostgreSQL, Tailwind CSS, Sobelow, Credo, Ecto, ExUnit, Plug, Phoenix LiveView, Phoenix LiveDashboard, Gettext, Jason, Swoosh, Finch, DNS Cluster, File System Watcher, Release Please, and ExCoveralls.
 
@@ -34,6 +32,9 @@ defmodule SimpleAgent do
   Use clear, direct language and ensure responses align with the latest updates in technology and practices to maintain relevance. Be brutally honest!
   """
 
+  @doc """
+  Starts the chat loop with the specified client and tools.
+  """
   def run(client, tools) do
     IO.puts("Chat with Claude (use Ctrl‑C to quit)")
     loop(client, tools, [])
@@ -55,6 +56,10 @@ defmodule SimpleAgent do
     end
   end
 
+  @doc """
+  Processes a user message, sends it to Claude, and handles any tool use.
+  Returns {blocks, updated_conversation}.
+  """
   def handle_response(client, tools, conversation) do
     # extract just the metadata for the API
     tool_defs = Enum.map(tools, &Map.take(&1, [:name, :description, :input_schema]))
@@ -67,37 +72,49 @@ defmodule SimpleAgent do
       tool_choice: %{type: "auto"}
     ]
 
-    {:ok, %{"content" => content_blocks}} = Anthropix.chat(client, params)
+    {:ok, response} = Anthropix.chat(client, params)
+    %{"content" => content_blocks, "stop_reason" => stop_reason} = response
     conversation = conversation ++ [%{role: "assistant", content: content_blocks}]
 
-    case Enum.find_index(content_blocks, &(&1["type"] == "tool_use")) do
-      nil ->
-        # no tool needed → final assistant response
-        {content_blocks, conversation}
+    # Handle response based on stop_reason from Anthropic API
+    # stop_reason can be one of:
+    # - "end_turn": the model reached a natural stopping point
+    # - "max_tokens": exceeded the requested max_tokens or the model's maximum
+    # - "stop_sequence": one of the provided custom stop_sequences was generated
+    # - "tool_use": the model invoked one or more tools
+    case stop_reason do
+      "tool_use" ->
+        tool_result_blocks =
+          Enum.reduce(content_blocks, [], fn block, acc ->
+            case process_blocks(block, tools) do
+              nil -> acc
+              result -> acc ++ [result]
+            end
+          end)
 
-      tool_use_index ->
-        # Print any text blocks that appear before the tool_use block
-        content_blocks
-        |> Enum.take(tool_use_index)
-        |> Enum.each(&print_block/1)
-
-        # Get the tool_use block
-        tool_use = Enum.at(content_blocks, tool_use_index)
-
-        # Execute the requested tool
-        IO.puts("\e[92mtool\e[0m: #{tool_use["name"]}(#{Jason.encode!(tool_use["input"])})")
-        result = execute_tool(tool_use, tools)
-
-        # wrap result in a tool_result block and re‑invoke Claude
-        tool_result_block = %{
-          "type" => "tool_result",
-          "tool_use_id" => tool_use["id"],
-          "content" => result
-        }
-
-        new_convo = conversation ++ [%{role: "user", content: [tool_result_block]}]
+        new_convo = conversation ++ [%{role: "user", content: tool_result_blocks}]
         handle_response(client, tools, new_convo)
+
+      _ ->
+        {content_blocks, conversation}
     end
+  end
+
+  defp process_blocks(%{"type" => "tool_use", "id" => id} = block, tools) do
+    print_block(block)
+    result = execute_tool(block, tools)
+
+    %{
+      "type" => "tool_result",
+      "tool_use_id" => id,
+      "content" => result
+    }
+  end
+
+  defp process_blocks(block, _tools) do
+    print_block(block)
+
+    nil
   end
 
   defp execute_tool(%{"name" => name, "input" => input}, tools) do
@@ -109,6 +126,14 @@ defmodule SimpleAgent do
 
   defp print_block(%{"type" => "text", "text" => text}) do
     IO.puts("\e[93mClaude\e[0m: #{text}")
+  end
+
+  defp print_block(%{"type" => "thinking", "text" => text}) do
+    IO.puts("\e[96mClaude (thinking)\e[0m: #{text}")
+  end
+
+  defp print_block(%{"type" => "tool_use", "name" => name}) do
+    IO.puts("\e[92mClaude is using tool\e[0m: #{name}")
   end
 
   defp print_block(_), do: :ok

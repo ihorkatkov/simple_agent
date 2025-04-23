@@ -1,5 +1,7 @@
 # Simple Agent
 
+hello world
+
 A showcase library demonstrating a simple coding agent implementation in Elixir. 
 
 ## Overview
