@@ -24,3 +24,6 @@ simple_agent-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+
+/simple_agent
