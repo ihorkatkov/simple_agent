@@ -124,7 +124,7 @@ defmodule SimpleAgent do
   defp execute_tool(%{"name" => name, "input" => input}, tools) do
     case Enum.find(tools, &(&1.name == name)) do
       %{function: fun} -> fun.(input)
-      _ -> "tool not found"
+      nil -> "tool not found"
     end
   end
 

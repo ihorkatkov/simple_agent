@@ -58,7 +58,32 @@ defmodule SimpleAgent.Tools do
   }
 
   @doc "Expose a list of all tools (with both metadata & function)"
-  def tool_definitions, do: [@list_files, @read_file, @edit_file]
+  def tool_definitions do
+    local_tools = [@list_files, @read_file, @edit_file]
+    {:ok, %Hermes.MCP.Response{} = response} = Hermes.Client.list_tools(SimpleAgent.MCPClient)
+
+    mcp_tools =
+      Enum.map(response.result["tools"], fn tool ->
+        %{
+          name: tool["name"],
+          description: tool["description"],
+          input_schema: tool["inputSchema"],
+          function: &SimpleAgent.Tools.mcp_tool_function(tool["name"], &1)
+        }
+      end)
+
+    local_tools ++ mcp_tools
+  end
+
+  def mcp_tool_function(tool, input) do
+    {:ok, %Hermes.MCP.Response{} = response} =
+      Hermes.Client.call_tool(SimpleAgent.MCPClient, tool, input)
+
+    response.result
+    |> Map.get("content")
+    |> Enum.map(& &1["text"])
+    |> Enum.join("\n")
+  end
 
   # -- Actual implementations:
 
