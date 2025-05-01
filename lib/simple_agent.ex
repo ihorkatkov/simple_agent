@@ -50,9 +50,7 @@ defmodule SimpleAgent do
       LLMChain.new!(%{
         llm:
           ChatOpenAI.new!(%{
-            model: "o3-mini",
-            thinking: true,
-            reasoning_mode: true,
+            model: "gpt-4.1-2025-04-14",
             temperature: 1,
             verbose_api: false
           }),
