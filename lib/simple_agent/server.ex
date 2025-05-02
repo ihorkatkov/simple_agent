@@ -50,7 +50,7 @@ defmodule SimpleAgent.Server do
   Formats and prints a block of content from Claude.
   """
   def print_block(%{"type" => "text", "text" => text}) do
-    IO.puts("\e[93mClaude\e[0m: #{text}")
+    IO.puts("\e[93mSimple Coding Agent\e[0m: #{text}")
   end
 
   def print_block(_), do: :ok

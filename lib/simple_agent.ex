@@ -5,6 +5,12 @@ defmodule SimpleAgent do
 
   alias SimpleAgent.Conversation
 
+  alias LangChain.ChatModels.ChatOpenAI
+  alias LangChain.Chains.LLMChain
+  alias LangChain.Message
+
+  require Logger
+
   @system_prompt """
   Act as an expert senior Elixir engineer. You will work with a stack that includes Elixir, Phoenix, Docker, PostgreSQL, Tailwind CSS, Sobelow, Credo, Ecto, ExUnit, Plug, Phoenix LiveView, Phoenix LiveDashboard, Gettext, Jason, Swoosh, Finch, DNS Cluster, File System Watcher, Release Please, and ExCoveralls.
 
@@ -37,12 +43,27 @@ defmodule SimpleAgent do
   @doc """
   Starts the chat loop with the specified client and tools.
   """
-  def run(client, tools) do
-    IO.puts("Chat with Claude (use Ctrl‑C to quit)")
-    loop(%Conversation{}, client, tools)
+  def run do
+    IO.puts("Chat with Simple Coding Agent (use Ctrl‑C to quit)")
+
+    chain =
+      LLMChain.new!(%{
+        llm:
+          ChatOpenAI.new!(%{
+            model: "gpt-4.1-2025-04-14",
+            temperature: 1,
+            verbose_api: false
+          }),
+        verbose: false
+      })
+      |> LLMChain.add_callback(%{on_message_processed: &print_message/2})
+      |> LLMChain.add_message(Message.new_system!(@system_prompt))
+      |> LLMChain.add_tools(SimpleAgent.Tools.tool_definitions())
+
+    loop(chain)
   end
 
-  defp loop(conversation, client, tools) do
+  defp loop(chain) do
     case IO.gets("\e[94mYou\e[0m: ") do
       :eof ->
         # user sent EOF
@@ -51,94 +72,48 @@ defmodule SimpleAgent do
       raw_input ->
         user_input = String.trim(raw_input)
 
-        conversation
-        |> Conversation.add_user_message(user_input)
-        |> handle_response(client, tools)
-        |> loop(client, tools)
+        result =
+          chain
+          |> LLMChain.add_message(Message.new_user!(user_input))
+          |> LLMChain.run(mode: :while_needs_response)
+
+        case result do
+          {:ok, chain} ->
+            loop(chain)
+
+          {:error, error} ->
+            IO.puts("\e[91mError: #{inspect(error)}\e[0m")
+            loop(chain)
+        end
     end
   end
 
-  @doc """
-  Processes a user message, sends it to Claude, and handles any tool use.
-  Returns {blocks, updated_conversation}.
-  """
-  def handle_response(conversation, client, tools) do
-    # extract just the metadata for the API
-    tool_defs = Enum.map(tools, &Map.take(&1, [:name, :description, :input_schema]))
-
-    params = [
-      model: "claude-3-7-sonnet-latest",
-      system: @system_prompt,
-      messages: conversation.messages,
-      tools: tool_defs,
-      tool_choice: %{type: "auto"}
-    ]
-
-    {:ok, response} = Anthropix.chat(client, params)
-    %{"content" => content_blocks, "stop_reason" => stop_reason} = response
-    conversation = Conversation.add_assistant_message(conversation, content_blocks)
-
-    # Handle response based on stop_reason from Anthropic API
-    # stop_reason can be one of:
-    # - "end_turn": the model reached a natural stopping point
-    # - "max_tokens": exceeded the requested max_tokens or the model's maximum
-    # - "stop_sequence": one of the provided custom stop_sequences was generated
-    # - "tool_use": the model invoked one or more tools
-    case stop_reason do
-      "tool_use" ->
-        tool_result_blocks =
-          Enum.reduce(content_blocks, [], fn block, acc ->
-            case process_blocks(block, tools) do
-              nil -> acc
-              result -> acc ++ [result]
-            end
-          end)
-
-        conversation
-        |> Conversation.add_user_message(tool_result_blocks)
-        |> handle_response(client, tools)
+  defp print_message(chain, %LangChain.Message{content: content} = message) do
+    case content do
+      content when is_list(content) ->
+        Enum.each(content, &print_block(chain, &1))
 
       _ ->
-        Enum.each(content_blocks, &print_block/1)
-        conversation
+        IO.inspect(message)
     end
   end
 
-  defp process_blocks(%{"type" => "tool_use", "id" => id} = block, tools) do
-    print_block(block)
-    result = execute_tool(block, tools)
+  defp print_messages(_chain, message) do
+    Logger.warning("Unknown message type: #{inspect(message)}")
 
-    %{
-      "type" => "tool_result",
-      "tool_use_id" => id,
-      "content" => result
-    }
+    :ok
   end
 
-  defp process_blocks(block, _tools) do
-    print_block(block)
-
-    nil
+  defp print_block(_chain, %LangChain.Message.ContentPart{type: :text, content: text}) do
+    IO.puts("\e[93mSimple Coding Agent\e[0m: #{text}")
   end
 
-  defp execute_tool(%{"name" => name, "input" => input}, tools) do
-    case Enum.find(tools, &(&1.name == name)) do
-      %{function: fun} -> fun.(input)
-      nil -> "tool not found"
-    end
+  defp print_block(_chain, %LangChain.Message.ContentPart{type: :thinking, content: text}) do
+    IO.puts("\e[96mSimple Coding Agent (thinking)\e[0m: #{text}")
   end
 
-  defp print_block(%{"type" => "text", "text" => text}) do
-    IO.puts("\e[93mClaude\e[0m: #{text}")
+  defp print_block(_chain, block) do
+    Logger.warning("Unknown message type: #{inspect(block)}")
+    IO.puts("\e[95mSimple Coding Agent\e[0m: #{inspect(block)}")
   end
-
-  defp print_block(%{"type" => "thinking", "text" => text}) do
-    IO.puts("\e[96mClaude (thinking)\e[0m: #{text}")
-  end
-
-  defp print_block(%{"type" => "tool_use", "name" => name}) do
-    IO.puts("\e[92mClaude is using tool\e[0m: #{name}")
-  end
-
-  defp print_block(_), do: :ok
 end
